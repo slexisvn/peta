@@ -1,0 +1,49 @@
+{
+  "name": "@slexisvn/peta",
+  "version": "0.1.0",
+  "description": "Package manager for the Tera language.",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "bin": {
+    "peta": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js",
+      "require": "./dist/browser.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.8"
+  },
+  "peerDependencies": {
+    "@slexisvn/tera": ">=0.1.4"
+  },
+  "peerDependenciesMeta": {
+    "@slexisvn/tera": {
+      "optional": true
+    }
+  }
+}
