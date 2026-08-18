@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { ContentError, isUnsafePath, requireAllowed } from "./content.js";
@@ -9,13 +10,14 @@ import { PetaError } from "./errors.js";
 
 export class TreeError extends PetaError {}
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 
 export type InstalledPackage = {
   readonly name: PackageName;
   readonly version: Version;
   readonly source: ResolvedSource;
   readonly files: number;
+  readonly digest: string;
 };
 
 export type TreeState = {
@@ -56,6 +58,16 @@ export function packageFiles(directory: string): readonly string[] {
   return [...files].sort();
 }
 
+export function contentDigest(directory: string, files: readonly string[]): string {
+  const hash = crypto.createHash("sha256");
+  for (const file of files) {
+    const contents = fs.readFileSync(path.join(directory, ...file.split("/")));
+    hash.update(JSON.stringify([file, contents.length]));
+    hash.update(contents);
+  }
+  return hash.digest("hex");
+}
+
 function copyFiles(from: string, to: string, files: readonly string[]): void {
   for (const file of files) {
     const target = path.join(to, ...file.split("/"));
@@ -82,7 +94,7 @@ export function readState(root: string): TreeState {
   if (!fs.existsSync(target)) return { packages: new Map() };
   const source = JSON.parse(fs.readFileSync(target, "utf8")) as {
     stateVersion?: number;
-    packages?: Record<string, { version: string; source: string; files: number }>;
+    packages?: Record<string, { version: string; source: string; files: number; digest: string }>;
   };
   if (source.stateVersion !== STATE_VERSION) return { packages: new Map() };
   const packages = new Map<string, InstalledPackage>();
@@ -92,6 +104,7 @@ export function readState(root: string): TreeState {
       version: parseVersion(entry.version),
       source: parseResolvedSource(entry.source),
       files: entry.files,
+      digest: entry.digest,
     });
   }
   return { packages };
@@ -106,6 +119,7 @@ export function writeState(root: string, state: TreeState): void {
       version: formatVersion(entry.version),
       source: formatResolvedSource(entry.source),
       files: entry.files,
+      digest: entry.digest,
     };
   }
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -123,12 +137,11 @@ export type SyncOutcome = {
   readonly unchanged: readonly string[];
 };
 
-function sameInstall(left: InstalledPackage, right: PackageContents, files: number): boolean {
-  if (right.source.kind === "path") return false;
+function sameInstall(left: InstalledPackage, right: InstalledPackage): boolean {
   return (
     formatVersion(left.version) === formatVersion(right.version) &&
     formatResolvedSource(left.source) === formatResolvedSource(right.source) &&
-    left.files === files
+    left.digest === right.digest
   );
 }
 
@@ -149,9 +162,10 @@ export function syncTree(root: string, contents: readonly PackageContents[]): Sy
       version: entry.version,
       source: entry.source,
       files: files.length,
+      digest: contentDigest(entry.directory, files),
     };
     next.set(entry.name.text, installed);
-    if (before !== undefined && sameInstall(before, entry, files.length) && fs.existsSync(target)) {
+    if (before !== undefined && sameInstall(before, installed) && fs.existsSync(target)) {
       unchanged.push(entry.name.text);
       continue;
     }

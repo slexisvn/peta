@@ -142,6 +142,7 @@ export type { DependencySource, ResolvedSource } from "./core/source.js";
 export { TarError, packTar, unpackTar } from "./core/tar.js";
 export type { TarEntry } from "./core/tar.js";
 export {
+  contentDigest,
   installedPathFor,
   packageFiles,
   readState,

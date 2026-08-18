@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { run } from "../../src/cli/run.js";
 import { Sandbox } from "../support/project.js";
@@ -121,6 +122,55 @@ describe("peta install with a path dependency", () => {
     app({});
     expect(await peta("add", "slexis.json", "--path", "../json")).toBe(0);
     expect(box.exists("app/tera_packages/slexis/json/__init__.tera")).toBe(true);
+  });
+});
+
+describe("peta install re-syncs a path dependency", () => {
+  const ENTRY = "json/src/__init__.tera";
+  const INSTALLED = "app/tera_packages/slexis/json/__init__.tera";
+
+  async function installed(source: string): Promise<void> {
+    box.package("json", { name: "slexis.json", files: { "src/__init__.tera": source } });
+    app({ "slexis.json": { path: "../json" } });
+    await peta("install");
+    output.length = 0;
+  }
+
+  it("reports nothing to do when the source has not been edited", async () => {
+    await installed("fn parse(text): return text\n");
+
+    expect(await peta("install")).toBe(0);
+    expect(output.join("\n")).toContain("1 package installed (up to date)");
+    expect(output.join("\n")).not.toContain("updated slexis.json");
+  });
+
+  it("rewrites no file when nothing changed", async () => {
+    await installed("fn parse(text): return text\n");
+    const copied = vi.spyOn(fs, "copyFileSync");
+
+    await peta("install");
+
+    expect(copied).not.toHaveBeenCalled();
+    expect(box.read(INSTALLED)).toBe("fn parse(text): return text\n");
+  });
+
+  it("reports and applies an edit to the source", async () => {
+    await installed("fn parse(text): return text\n");
+    box.write(ENTRY, "fn parse(text): return 0\n");
+
+    expect(await peta("install")).toBe(0);
+    expect(output.join("\n")).toContain("updated slexis.json");
+    expect(box.read(INSTALLED)).toBe("fn parse(text): return 0\n");
+  });
+
+  it("refreshes an edited source under --frozen", async () => {
+    await installed("fn parse(text): return text\n");
+    const lock = box.read("app/tera.lock");
+    box.write(ENTRY, "fn parse(text): return 0\n");
+
+    expect(await peta("install", "--frozen")).toBe(0);
+    expect(box.read(INSTALLED)).toBe("fn parse(text): return 0\n");
+    expect(box.read("app/tera.lock")).toBe(lock);
   });
 });
 
