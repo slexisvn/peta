@@ -13,6 +13,17 @@ export default defineConfig([
     treeshake: true
   },
   {
+    entry: { browser: "src/browser.ts" },
+    platform: "neutral",
+    format: ["esm", "cjs"],
+    target: "es2022",
+    dts: true,
+    clean: false,
+    sourcemap: false,
+    splitting: false,
+    treeshake: true
+  },
+  {
     entry: { cli: "src/cli.ts" },
     platform: "node",
     format: ["esm"],
