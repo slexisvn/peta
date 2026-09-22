@@ -5,8 +5,23 @@
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slexisvn/peta.git"
+  },
+  "bugs": {
+    "url": "https://github.com/slexisvn/peta/issues"
+  },
+  "homepage": "https://github.com/slexisvn/peta",
+  "keywords": [
+    "tera",
+    "package-manager"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
-    "peta": "./dist/cli.js"
+    "peta": "dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,11 +31,6 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
-    "./browser": {
-      "types": "./dist/browser.d.ts",
-      "import": "./dist/browser.js",
-      "require": "./dist/browser.cjs"
-    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -28,6 +38,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "check": "npm run typecheck && npm test",
     "start": "node dist/cli.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
