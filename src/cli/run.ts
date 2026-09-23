@@ -8,6 +8,7 @@ import { ALIASES, COMMANDS, type PetaConfig } from "./spec.js";
 import { runInit } from "./commands/init.js";
 import { runInstall } from "./commands/install.js";
 import { runRemove } from "./commands/remove.js";
+import { runRegistry } from "./commands/registry.js";
 import { runList, runWhy } from "./commands/list.js";
 import { runCheck } from "./commands/check.js";
 import { runPack } from "./commands/pack.js";
@@ -79,6 +80,8 @@ async function dispatch(config: PetaConfig): Promise<number> {
       return runInstall(config);
     case "remove":
       return runRemove(config);
+    case "registry":
+      return runRegistry(config);
     case "update":
       return runUpdate(config);
     case "list":

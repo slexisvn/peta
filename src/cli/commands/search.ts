@@ -18,7 +18,7 @@ export function registryFor(location: string | null): Registry {
     location === null ? configuredRegistry(DEFAULT_REGISTRY) : registryFrom(location, DEFAULT_REGISTRY);
   if (registry === null) {
     throw new UsageError(
-      `no registry configured (set ${REGISTRY_VARIABLE} or pass --registry <path or url>)`,
+      `no registry configured (run 'peta registry <path or url>', set ${REGISTRY_VARIABLE}, or pass --registry <path or url>)`,
     );
   }
   return registry;

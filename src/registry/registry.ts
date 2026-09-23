@@ -13,6 +13,7 @@ import {
   selectableEntries,
   type PackageIndex,
 } from "./index-file.js";
+import { configuredRegistry as savedRegistry } from "./config.js";
 
 export class RegistryError extends PetaError {}
 
@@ -165,17 +166,35 @@ export class HttpRegistry implements Registry {
 
 export const REGISTRY_VARIABLE = "PETA_REGISTRY";
 
+function isBareHost(location: string): boolean {
+  return /^(localhost|[a-z0-9][a-z0-9.-]*\.[a-z0-9.-]+)(:\d+)?(\/.*)?$/i.test(location);
+}
+
+export function normalizeRegistryLocation(location: string): string {
+  const trimmed = location.trim();
+  const normalized = trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
+  if (/^https?:\/\//.test(normalized)) return normalized;
+  if (isBareHost(normalized)) return `https://${normalized}`;
+  return normalized;
+}
+
 export function registryFrom(
   location: string,
   name: string,
   options: NameOptions = {},
 ): Registry {
-  if (/^https?:\/\//.test(location)) return new HttpRegistry(name, location, options);
-  return new FileRegistry(name, path.resolve(location), options);
+  const normalized = normalizeRegistryLocation(location);
+  if (/^https?:\/\//.test(normalized)) return new HttpRegistry(name, normalized, options);
+  return new FileRegistry(name, path.resolve(normalized), options);
+}
+
+export function configuredRegistryLocation(override: string | null = null): string | null {
+  const env = process.env[REGISTRY_VARIABLE];
+  const location = override ?? (env !== undefined && env.length > 0 ? env : savedRegistry());
+  return location === null ? null : normalizeRegistryLocation(location);
 }
 
 export function configuredRegistry(name: string, options: NameOptions = {}): Registry | null {
-  const location = process.env[REGISTRY_VARIABLE];
-  if (location === undefined || location.length === 0) return null;
-  return registryFrom(location, name, options);
+  const location = configuredRegistryLocation();
+  return location === null ? null : registryFrom(location, name, options);
 }

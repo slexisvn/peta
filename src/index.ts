@@ -198,10 +198,20 @@ export {
   REGISTRY_VARIABLE,
   RegistryError,
   configuredRegistry,
+  configuredRegistryLocation,
+  normalizeRegistryLocation,
   registryFrom,
   verifyIntegrity,
 } from "./registry/registry.js";
 export type { Registry, SearchHit } from "./registry/registry.js";
+export {
+  ConfigError,
+  configuredRegistry as configuredRegistrySetting,
+  forgetRegistry,
+  readRegistryConfig,
+  rememberRegistry,
+} from "./registry/config.js";
+export type { RegistryConfig } from "./registry/config.js";
 export { RegistryStore } from "./registry/store.js";
 export type { StoredPackage } from "./registry/store.js";
 export { SolveFailure, solve } from "./solver/solve.js";

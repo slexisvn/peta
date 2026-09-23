@@ -3,6 +3,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { run } from "../../src/cli/run.js";
 import { HOME_VARIABLE } from "../../src/core/home.js";
+import { HubClient, normalizeHubRegistry } from "../../src/registry/client.js";
 import { REGISTRY_VARIABLE, FileRegistry, HttpRegistry } from "../../src/registry/registry.js";
 import {
   archivePathFor,
@@ -22,6 +23,8 @@ let box: Sandbox;
 let output: string[];
 let previousHome: string | undefined;
 let previousRegistry: string | undefined;
+let previousBrowser: string | undefined;
+let previousForceBrowserLogin: string | undefined;
 
 function publish(spec: PackageSpec & { name: string; version: string }): void {
   const source = `build/${spec.name}-${spec.version}`;
@@ -61,6 +64,8 @@ beforeEach(() => {
   output = [];
   previousHome = process.env[HOME_VARIABLE];
   previousRegistry = process.env[REGISTRY_VARIABLE];
+  previousBrowser = process.env["PETA_BROWSER"];
+  previousForceBrowserLogin = process.env["PETA_LOGIN_BROWSER"];
   process.env[HOME_VARIABLE] = box.at("home");
   process.env[REGISTRY_VARIABLE] = box.at("registry");
   vi.spyOn(console, "log").mockImplementation((text: unknown) => {
@@ -76,6 +81,8 @@ afterEach(() => {
   for (const [key, value] of [
     [HOME_VARIABLE, previousHome],
     [REGISTRY_VARIABLE, previousRegistry],
+    ["PETA_BROWSER", previousBrowser],
+    ["PETA_LOGIN_BROWSER", previousForceBrowserLogin],
   ] as const) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -335,6 +342,125 @@ describe("the http registry", () => {
       const archive = await registry.archive(index!.entries[0]!.archive);
       expect(integrityOf(archive)).toBe(index!.entries[0]!.integrity);
       expect(await registry.index(parsePackageName("acme.missing"))).toBeNull();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("normalizes bare hub hosts to https", () => {
+    expect(normalizeHubRegistry("registry.example.test/")).toBe("https://registry.example.test");
+    expect(normalizeHubRegistry("http://localhost:3000/")).toBe("http://localhost:3000");
+    expect(new HubClient("registry.example.test", null).registry).toBe(
+      "https://registry.example.test",
+    );
+  });
+
+  it("uses the saved registry when no override or environment is set", async () => {
+    delete process.env[REGISTRY_VARIABLE];
+    publish({ name: "slexis.json", version: "1.0.0" });
+
+    expect(await run(["registry", box.at("registry")])).toBe(0);
+    output = [];
+    expect(await run(["search"])).toBe(0);
+    expect(output).toEqual(["slexis.json 1.0.0"]);
+  });
+
+  it("lets --registry override the saved registry", async () => {
+    delete process.env[REGISTRY_VARIABLE];
+    publish({ name: "slexis.json", version: "1.0.0" });
+
+    expect(await run(["registry", box.at("empty-registry")])).toBe(0);
+    output = [];
+    expect(await run(["search", "--registry", box.at("registry")])).toBe(0);
+    expect(output).toEqual(["slexis.json 1.0.0"]);
+  });
+
+  it("logs in by verifying and storing a bearer token", async () => {
+    delete process.env[REGISTRY_VARIABLE];
+    let authorization: string | undefined;
+    const server = http.createServer((request, response) => {
+      authorization = request.headers.authorization;
+      if (request.url !== "/api/v1/auth/whoami") {
+        response.statusCode = 404;
+        response.end();
+        return;
+      }
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ login: "slexisvn", name: "Slexis", scopes: ["slexis"] }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as AddressInfo).port;
+    const registry = `http://127.0.0.1:${port}`;
+
+    try {
+      expect(await run(["registry", registry])).toBe(0);
+      output = [];
+      expect(await run(["login", "--token", "secret-token"])).toBe(0);
+      expect(authorization).toBe("Bearer secret-token");
+      expect(output.join("\n")).toContain(`signed in to ${registry} as slexisvn`);
+      expect(JSON.parse(box.read("home/credentials"))).toEqual({
+        [registry]: "secret-token",
+      });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("logs in through the browser callback flow", async () => {
+    delete process.env[REGISTRY_VARIABLE];
+    process.env["PETA_BROWSER"] = "none";
+    process.env["PETA_LOGIN_BROWSER"] = "1";
+    let authorization: string | undefined;
+    const server = http.createServer((request, response) => {
+      const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
+      if (url.pathname === "/api/v1/auth/github") {
+        const redirect = url.searchParams.get("cli_redirect");
+        const state = url.searchParams.get("cli_state");
+        if (redirect === null || state === null) {
+          response.statusCode = 400;
+          response.end();
+          return;
+        }
+        const target = new URL(redirect);
+        target.searchParams.set("state", state);
+        target.searchParams.set("token", "browser-token");
+        response.statusCode = 302;
+        response.setHeader("location", target.toString());
+        response.end();
+        return;
+      }
+      if (url.pathname === "/api/v1/auth/whoami") {
+        authorization = request.headers.authorization;
+        response.setHeader("content-type", "application/json");
+        response.end(JSON.stringify({ login: "slexisvn", name: "Slexis", scopes: ["slexis"] }));
+        return;
+      }
+      response.statusCode = 404;
+      response.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as AddressInfo).port;
+    const registry = `http://127.0.0.1:${port}`;
+
+    try {
+      const login = run(["login", "--registry", registry]);
+      let opened = false;
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const url = output.find((line) => line.startsWith(`${registry}/api/v1/auth/github?`));
+        if (url !== undefined) {
+          opened = true;
+          await fetch(url);
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(opened).toBe(true);
+      expect(await login).toBe(0);
+      expect(authorization).toBe("Bearer browser-token");
+      expect(output.join("\n")).toContain(`signed in to ${registry} as slexisvn`);
+      expect(JSON.parse(box.read("home/credentials"))).toEqual({
+        [registry]: "browser-token",
+      });
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

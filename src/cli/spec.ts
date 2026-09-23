@@ -18,6 +18,7 @@ import {
   type YankConfig,
 } from "./commands/publish.js";
 import { REMOVE_COMMAND, type RemoveConfig } from "./commands/remove.js";
+import { REGISTRY_COMMAND, type RegistryConfig } from "./commands/registry.js";
 import { SCOPE_COMMAND, type ScopeConfig } from "./commands/scope.js";
 import { SEARCH_COMMAND, type SearchConfig } from "./commands/search.js";
 import { TASK_COMMAND, type TaskConfig } from "./commands/task.js";
@@ -37,6 +38,7 @@ export type PetaConfig =
   | InitConfig
   | InstallConfig
   | RemoveConfig
+  | RegistryConfig
   | UpdateConfig
   | ListConfig
   | WhyConfig
@@ -90,6 +92,7 @@ export const COMMANDS: CommandTable<PetaConfig> = [
   INIT_COMMAND,
   INSTALL_COMMAND,
   REMOVE_COMMAND,
+  REGISTRY_COMMAND,
   UPDATE_COMMAND,
   LIST_COMMAND,
   WHY_COMMAND,

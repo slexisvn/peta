@@ -1,5 +1,5 @@
 import { PetaError } from "../core/errors.js";
-import { normalizeRegistry } from "./credentials.js";
+import { normalizeRegistryLocation } from "./registry.js";
 
 export class HubError extends PetaError {}
 
@@ -17,6 +17,8 @@ export type PublishOutcome = {
   readonly files: number;
 };
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 function messageFrom(status: number, body: string): string {
   try {
     const parsed = JSON.parse(body) as { message?: unknown };
@@ -28,6 +30,10 @@ function messageFrom(status: number, body: string): string {
   return `the registry answered ${status}`;
 }
 
+export function normalizeHubRegistry(base: string): string {
+  return normalizeRegistryLocation(base);
+}
+
 export class HubClient {
   private readonly base: string;
 
@@ -35,7 +41,7 @@ export class HubClient {
     base: string,
     private readonly token: string | null,
   ) {
-    this.base = normalizeRegistry(base);
+    this.base = normalizeHubRegistry(base);
     if (!/^https?:\/\//.test(this.base)) {
       throw new HubError(`'${base}' is not an http registry; publishing needs a hub URL`);
     }
@@ -61,6 +67,7 @@ export class HubClient {
       response = await fetch(target, {
         method: init.method,
         headers: this.headers(init.headers),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         ...(init.body === undefined ? {} : { body: init.body }),
       });
     } catch (error) {

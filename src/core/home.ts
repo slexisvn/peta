@@ -25,3 +25,7 @@ export function archiveCacheDirectory(): string {
 export function credentialsPath(): string {
   return path.join(teraHome(), "credentials");
 }
+
+export function configPath(): string {
+  return path.join(teraHome(), "config");
+}
